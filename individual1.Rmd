@@ -1,0 +1,178 @@
+---
+title: "indivdual1.Rmd"
+author: "Taylor Turner"
+date: "10/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r,  include=FALSE}
+library(readxl)
+library(tidyverse)
+defense <- read_excel('./cyclonesFootball2019.xlsx', sheet='Defensive')
+offense <- read_excel('./cyclonesFootball2019.xlsx', sheet='Offensive')
+biography <- read_excel('./cyclonesFootball2019.xlsx', sheet='Biography')
+```
+
+## Part one: Cleaning data
+1. Making 'Name' and 'Opponent_Opponent' factors
+```{r}
+defClean <- defense %>% 
+  mutate_at(c('Name', 'Opponent_Opponent'), factor)
+offClean <- offense %>% 
+  mutate_at(c('Name', 'Opponent_Opponent'), factor)
+```
+2. Making data numerical
+```{r}
+defClean <- defClean%>%
+ mutate_at(c(3:11), as.numeric)
+offClean <- offClean %>% 
+  suppressWarnings(mutate_at(c(3:12), as.numeric))
+bioClean <- biography %>% 
+  mutate_at(c(4), as.numeric)
+```
+3. The height of each player is now in inches. I did this by first separating the feet and inches. Then I made a new column in which I converted the feet column to inches and added the inches column to it.
+```{r}
+bioClean <- bioClean%>%
+   separate(Height, c('feet','inches'), sep='-')%>%
+   mutate_at(c(3:4), as.numeric)
+bioClean <- bioClean%>%
+  mutate(Height = feet*12 + inches)%>%
+  select(-c('feet','inches'))%>%
+  select(1:2, Height, everything())
+```
+```{r}
+str(defClean)
+str(offClean)
+str(bioClean)
+```
+
+## Part two: Tidying
+1. Creating the "stat" column
+```{r}
+defClean <- defClean %>% 
+  pivot_longer(Tackles_Solo:Pass_PB, names_to = 'stat')
+```
+2. Rare skills are those that have the most point values of 0. These skills that are the rarest are tackles_sack, tackles_ff, turnover_fr, and turnover_int.
+```{r}
+defClean%>% ggplot(mapping = aes(x = value)) +
+  geom_histogram() +
+  facet_wrap(~stat, scales = "free") +
+  ggtitle('Distributions of the Defensive Stats') +
+  xlab('Number of Points') +
+  ylab('Frequency of Points')
+```
+
+3. From the plot, we can see that defense was better against Notre Dame in general. For Notre Dame, there are just more players with higher amounts of solo tackles compared to Iowa.
+```{r}
+defClean %>% 
+  filter((Opponent_Opponent == 'Iowa' | Opponent_Opponent == 'Notre Dame') & stat == 'Tackles_Solo') %>% 
+  pivot_wider(names_from = 'Opponent_Opponent', values_from = 'value') %>% 
+  select(Name, 'Iowa', 'Notre Dame') %>% 
+  ggplot(aes(`Iowa`, `Notre Dame`)) + 
+  geom_jitter() +
+  ggtitle('Solo Tackles for Iowa and Notre Dame')
+```
+
+4. Separating City and State
+```{r}
+bioClean <- bioClean%>% separate(Hometown, c('City', 'State'), sep=', ')
+head(bioClean)
+```
+
+
+5. We can see from this numerical summary that Iowa has the most players from it. ISU football players come from 19 different states. 
+```{r}
+bioClean%>%
+  group_by(State) %>% 
+  select(State) %>% 
+  summarize(Count=n(), .groups = 'drop')
+```
+
+## Part three: Joining data frames
+1.
+```{r}
+defClean1 <- defClean%>%
+  select(-stat, -Opponent_Opponent)%>%
+  group_by(Name)%>%
+  filter(value == max(value))%>%
+  distinct()
+defClean1 <- defClean1%>%
+  left_join(bioClean, by = "Name")
+defClean1%>%
+  group_by(State) %>% 
+  select(State) %>% 
+  summarize(Count=n(), .groups = 'drop')
+
+offClean1 <- offClean%>%
+  select(Name)%>%
+  distinct()%>%
+  left_join(bioClean, by = "Name")
+offClean1%>%
+  group_by(State) %>% 
+  select(State) %>% 
+  summarize(Count=n(), .groups = 'drop')
+```
+
+2.
+```{r}
+offClean <- offClean %>% mutate_at(c(3:12), ~replace(., is.na(.), 0))%>%
+  mutate_at(c(3:8), as.numeric)%>%
+  mutate_at(c(9:12), as.numeric)
+offScore <- offClean %>% 
+  mutate(offense = Rushing_ATT + Rushing_YDS + Rushing_TD + Receiving_REC	+ Receiving_YDS + Receiving_TD + Passing_YDS + Passing_TD + Passing_INT)%>% 
+  select(Name, offense)%>% 
+  group_by(Name)%>% 
+  summarise(offense = sum(offense), .groups = 'drop')
+
+defClean2 <- defense %>% mutate_at(c(3:11), ~replace(., is.na(.), 0))%>%
+   mutate_at(c(3:11), as.numeric)
+defScore <- defClean2%>%
+   mutate(defense = Tackles_Solo + Tackles_ASST + Tackles_TFL + Tackles_Sack + Turnover_FF + Turnover_FR + Turnover_INT + Pass_QBH + Pass_PB) %>% 
+  select(Name, defense) %>% 
+  group_by(Name) %>% 
+  summarize(defense = sum(defense), .groups = 'drop')
+
+scores <- full_join(offScore, defScore, by = "Name")
+scores <- scores%>%
+  mutate_at(c(2:3), ~replace(., is.na(.), 0))%>%
+  mutate(score = defense + offense)
+
+ggplot() +
+  geom_jitter(aes(x = offense, y = defense, color = Name), data = filter(scores, Name == 'Purdy, Brock')) +
+  geom_jitter(aes(x = offense, y = defense), data = filter(scores, Name != 'Purdy, Brock')) +
+  ggtitle('Brock Purdy vs other ISU Football Players')
+```
+
+3.
+```{r}
+defense18 <- read_excel('./cyclonesFootball2018.xlsx', sheet='Defensive')
+offense18 <- read_excel('./cyclonesFootball2018.xlsx', sheet='Offensive')
+offClean18 <- offense18 %>% 
+  mutate_at(c(3:12), ~replace(., is.na(.), 0))%>%
+  mutate_at(c(3:8), as.numeric)%>%
+  mutate_at(c(10:12), as.numeric)
+offScore18 <- offClean18 %>% 
+  mutate(offense = Rushing_ATT + Rushing_YDS + Rushing_TD + Receiving_REC	+ Receiving_YDS + Receiving_TD + Passing_YDS + Passing_TD + Passing_INT)%>% 
+  select(Name, offense)%>% 
+  group_by(Name)%>% 
+  summarise(offense = sum(offense), .groups = 'drop')
+
+defClean18 <- defense18 %>% mutate_at(c(3:11), ~replace(., is.na(.), 0))%>%
+   mutate_at(c(3:11), as.numeric)
+defScore18 <- defClean18%>%
+   mutate(defense = Tackles_Solo + Tackles_ASST + Tackles_TFL + Tackles_Sack + Turnover_FF + Turnover_FR + Turnover_INT + Pass_QBH + Pass_PB) %>% 
+  select(Name, defense) %>% 
+  group_by(Name) %>% 
+  summarize(defense = sum(defense), .groups = 'drop')
+
+scores18 <- full_join(offScore18, defScore18, by = "Name")
+scores18 <- scores18%>%
+  mutate_at(c(2:3), ~replace(., is.na(.), 0))%>%
+  mutate(score18 = defense + offense)
+
+scoreCompare <- inner_join(select(scores, Name, score), select(scores18, Name, score18), by = "Name")
+```
+
