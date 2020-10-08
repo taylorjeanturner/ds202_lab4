@@ -50,7 +50,7 @@ str(bioClean)
 ```
 
 ## Part two: Tidying
-1. Creating the "stat" column
+1. Creating the "stat" column by using pivot longer
 ```{r}
 defClean <- defClean %>% 
   pivot_longer(Tackles_Solo:Pass_PB, names_to = 'stat')
@@ -76,14 +76,14 @@ defClean %>%
   ggtitle('Solo Tackles for Iowa and Notre Dame')
 ```
 
-4. Separating City and State
+4. Separating City and State using separate
 ```{r}
 bioClean <- bioClean%>% separate(Hometown, c('City', 'State'), sep=', ')
 head(bioClean)
 ```
 
 
-5. We can see from this numerical summary that Iowa has the most players from it. ISU football players come from 19 different states. 
+5. We can see from this numerical summary that Iowa has the most players from it. ISU football players come from 19 different states. I found this by first grouping the data by state, and then counting the occurences of each state in the data.
 ```{r}
 bioClean%>%
   group_by(State) %>% 
@@ -92,7 +92,7 @@ bioClean%>%
 ```
 
 ## Part three: Joining data frames
-1.
+1. First I got rid of unnecessary columns from each data set. Then I had to get rid of duplicate player names by filtering out their max value and then calling distinct(). Next I joined the data set to bioClean in order to get their states. I then grouped by state and counted how many occurences of each state there were. The first data set there is the defensive players and the second data set is the offensive players.
 ```{r}
 defClean1 <- defClean%>%
   select(-stat, -Opponent_Opponent)%>%
@@ -116,11 +116,11 @@ offClean1%>%
   summarize(Count=n(), .groups = 'drop')
 ```
 
-2.
+2. Compared to the other ISU players, Brock Purdy excels in offense points. It doesn't seem like he can really compare to the defense points, as he is more of an offensive player rather than a defensive player. I found this data by adding all the stat values up in the offense data set and then doing the same for the defense data set. Next I made a new data frame which joined the defense and offense scores that I had just created. From there, I was able to make a visual representation of the scores and compare.
 ```{r}
-offClean <- offClean %>% mutate_at(c(3:12), ~replace(., is.na(.), 0))%>%
-  mutate_at(c(3:8), as.numeric)%>%
-  mutate_at(c(9:12), as.numeric)
+offClean <- offClean %>% 
+  mutate_at(c(3:12), ~replace(., is.na(.), 0))%>%
+  mutate_at(c(3:12), as.numeric)
 offScore <- offClean %>% 
   mutate(offense = Rushing_ATT + Rushing_YDS + Rushing_TD + Receiving_REC	+ Receiving_YDS + Receiving_TD + Passing_YDS + Passing_TD + Passing_INT)%>% 
   select(Name, offense)%>% 
@@ -146,7 +146,8 @@ ggplot() +
   ggtitle('Brock Purdy vs other ISU Football Players')
 ```
 
-3.
+3. Some players who had really big improvements are Deshaunte Jones, Brock Purdy, Tarique Milton, and Charlie Kolar. I found this by doing the exact thing from part (2) to the data from 2018. I added offense and defense scores for each player in order to get their total scores. I then joined my data from scores and scores18, but only inlcuding the players that were present in both. I then made a scatter plot in which you can see the difference of scores. I did have to remove Brock Purdy just because his scores were a lot higher than everyone else and it made it hard to read the other data points.
+
 ```{r}
 defense18 <- read_excel('./cyclonesFootball2018.xlsx', sheet='Defensive')
 offense18 <- read_excel('./cyclonesFootball2018.xlsx', sheet='Offensive')
@@ -174,5 +175,6 @@ scores18 <- scores18%>%
   mutate(score18 = defense + offense)
 
 scoreCompare <- inner_join(select(scores, Name, score), select(scores18, Name, score18), by = "Name")
+ggplot() + geom_point(data=filter(scoreCompare, Name != 'Purdy, Brock'), mapping = aes(x = score, y = score18)) + ggtitle("Comparing Scores from 2018 to 2019")
 ```
 
